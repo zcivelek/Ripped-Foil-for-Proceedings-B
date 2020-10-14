@@ -1,0 +1,489 @@
+---
+title: "Patterned Paper Control - Experiment 3"
+author: "Zeynep Civelek"
+date: "June 30, 2020"
+output: word_document
+---
+
+```{r, include=FALSE}
+#PREPARE
+R.Version()#for referencing, shows you which R version you are using
+rm(list=ls())#removes any other items in your workspace
+ls()#check whether workspace is empty
+```
+
+```{r, include=FALSE}
+#Directory is set, data is added and all the libraries necessary for running the analyses are loaded.
+
+conmon1<-read.csv("ripped_monkey_control16.csv", header=T)#data includes last 16 trials of test and 16 trials of transfer phase
+#all the libraries necessary to run the analyses
+library(lme4)
+library(readr)
+library(tidyverse)
+library(sjPlot)
+#install.packages('TMB', type='source')
+library(ggthemes)
+library(gridExtra)
+library(reshape2)
+library(car)
+#library(psych)
+library("ggpubr")
+library(dplyr)
+
+```
+
+##Exploring data 
+
+The structure of the data is shown below with all the variable names and levels of measurement.
+
+```{r, echo=FALSE}
+conmon1$id<-as.factor(conmon1$id)
+conmon1$sex<-as.factor(conmon1$sex)
+conmon1$phase2<-as.factor(conmon1$phase2)
+conmon1$phase<-as.factor(conmon1$phase)
+conmon1$trialtype<-as.factor(conmon1$trialtype)
+
+str(conmon1)
+
+```
+
+Exploring the pre-test 1 (named warmup1 in data- the cups are initially empty/not covered and after the hiding event the baited cup is covered with patterned paper and the empty cup is covered with white paper) and pre-test 2 phases (named warmup2 in data- the cups are initially covered with white paper and after the hiding event, the baited cup is covered with patterned paper).
+
+```{r, echo=FALSE}
+conmon_complete<-read.csv("control_monkey_complete.csv", header=T)#complete data with all the pretest and test trials
+conmon_warm1 <- conmon_complete %>%
+  filter(sessiontype=="pattern-warmup1") %>%
+  group_by(id, sex, age, sessionno, trialno) %>% 
+  summarize(correct)
+
+conmon_warm2 <- conmon_complete %>%
+  filter(sessiontype=="pattern-warmup2") %>%
+  group_by(id, sex, age, sessionno, trialno) %>% 
+  summarize(correct)
+
+range(conmon_warm1$sessionno)
+range(conmon_warm2$sessionno)
+```
+
+**In pre-test 1, monkeys received up to 11 sessions to reach criterion and in pre-test 2, up to 2 sessions (or they'd receive up to 10 sessions). The minimum number of sessions to reach criterion was 2 (14/16 correct)**
+**After the initial warm up phase, the monkeys very quickly learnt to find the reward in the patterned cup.**
+
+Next I aggregated the trial-by-trial data to create one score per monkey for Test and Transfer phases so I can see the distribution of scores.
+
+```{r, echo=FALSE}
+conmon_individual <- conmon1 %>%
+  filter(!is.na(correct)) %>%
+  group_by(id) %>% 
+  summarize(correct = mean(correct))%>%
+  add_count(correct)
+
+conmon_test <- conmon1 %>%
+   filter(!is.na(correct)) %>%
+  filter(phase=="pattern-test") %>%
+  group_by(id) %>% 
+  summarize(correct = mean(correct))%>%
+  add_count(correct)
+
+conmon_transfer <- conmon1 %>%
+   filter(!is.na(correct)) %>%
+  filter(phase=="pattern-transfer") %>%
+  group_by(id) %>% 
+  summarize(correct = mean(correct))%>%
+  add_count(correct)
+
+conmon_separate <- conmon1 %>%
+  group_by(phase,trialtype, id) %>% 
+  summarize(correct = mean(correct))%>%
+  add_count(correct)
+
+```
+
+##Histograms for Test and Transfer Phases and the overall score
+
+```{r}
+hist(conmon3$correct, xlab="Mean score in Test", xlim=c(0,1))
+hist(conmon_transfer$correct, xlab="Mean score in Transfer", xlim=c(0,1))
+hist(conmon_individual$correct, xlab="Overall score (Test and Transfer)", xlim=c(0,1))
+```
+
+##Preparation of the data for running the GLMM
+
+* Scaling age and trial number
+* Coding categorical variables (trial type, sex, phase) as dummy variables 
+* Centering the slopes.
+
+```{r, echo=FALSE}
+#We scale variables so that the differences in the range of the variables do not influence the parameter estimations.
+conmon1$z.trialno<-as.vector(scale(conmon1$trialno))
+conmon1$z.age=as.vector(scale(conmon1$age))
+conmon1$trialtype<-relevel(conmon1$trialtype, ref = "stick")
+
+#coding dummy variables before centering the slopes
+conmon1$trialtype.food<-as.numeric(conmon1$trialtype==levels(conmon1$trialtype)[2])
+conmon1$sex.m<-as.numeric(conmon1$sex==levels(conmon1$sex)[2])
+conmon1$phase.transfer=as.numeric(conmon1$phase==levels(conmon1$phase)[2])
+
+#centering the slopes: p-values of the factors can be influenced by the choice of reference category.
+#by centering the factor for the random slope components the p-values should be the same irrespective of the choice of the reference level
+conmon1$trialtype.food.c<-conmon1$trialtype.food-mean(conmon1$trialtype.food)
+conmon1$phase.transfer.c=conmon1$phase.transfer-mean(conmon1$phase.transfer)
+conmon1$sex.m.c<-conmon1$sex.m -mean(conmon1$sex.m)
+
+```
+
+```{r, echo=FALSE}
+source("./Roger_functions/diagnostic_fcns.r")
+source("./Roger_functions/glmm_stability.r")
+source("./Roger_functions/boot_glmm.r")
+```
+
+##Full model - GLMM 01 Experiment 3
+
+```{r, echo=TRUE}
+contr<-glmerControl(optimizer="bobyqa", optCtrl=list(maxfun=10000000))
+full=glmer(correct ~ trialtype*phase+z.trialno+z.age+sex+(1|id)+(0+z.trialno+phase.transfer.c+trialtype.food.c|id),data=conmon1, family=binomial, control=contr)
+```
+
+The full model does not include box type (the location of the blue/pink box) as a random effect anymore due to convergence issues. There is the singular fit warning here and throughout though.
+
+##Model assumptions
+
+####Distribution of random effects
+```{r, echo=FALSE}
+#An assumption of GLMMs is that the BLUPs are normally distributed. We use the following function to evaluate this. BLUPs are Best Linear Unbiased Predictors: the estimated grouping factor's level specific deviation from the common intercept or slope.
+ranef.diagn.plot(full)
+```
+
+####Model stability
+
+```{r, echo=FALSE}
+#summary reveals min and max of the estimates obtained after casewise deletion of levels of random effects together with the original estimates.
+# m.stab=glmm.model.stab(model.res=full, contr=contr)
+# m.stab.plot(m.stab$summary[,-1])
+# m.stab$summary
+# m.stab$detailed$warnings
+```
+
+####Multicollinearity
+
+```{r, echo=FALSE}
+coll=lm(correct ~ trialtype+phase+z.trialno+z.age+sex, data=conmon1)
+round(vif(coll),3)
+#no vif issues
+```
+
+There is no indication of an issue.
+
+##Null model - GLMM 01 Experiment 3
+
+```{r, echo=TRUE}
+null=glmer(correct~ z.trialno + (1|id)+(0+z.trialno+phase.transfer.c+trialtype.food.c|id),data=conmon1, family=binomial, control=contr)
+```
+Trialno is added to the null model.
+
+
+##Full and Null comparison - GLMM 01 Experiment 3
+```{r, echo=FALSE}
+round(anova(null, full, test="Chisq"),3)
+```
+
+##Model output - Table S10
+
+####Coefficients
+
+```{r, echo=FALSE}
+round(summary(full)$coefficients, 3)
+```
+
+####Individual predictor: Likelihood tests
+
+```{r, echo=FALSE}
+xdrop1=drop1(full, test="Chisq",control=contr)
+round(xdrop1,3)
+```
+
+
+```{r, include=FALSE}
+####Confidence intervals for the full model with the interaction
+
+#conmon_model1=boot.glmm.pred(model.res=full, excl.warnings=T, nboots=1000, para=T)
+#save.image("conmon_model1_CIs.RData")
+load("conmon_model1_CIs.RData")
+round(conmon_model1$ci.estimates, 3)
+```
+
+**The null and full models are significantly different from each other. But the interaction term is not significant. I will remove this next to see if it improves the model.**
+
+##Reduced model without the interaction - GLMM 02 Experiment 3
+##Full model 2
+```{r, echo=TRUE}
+full2=glmer(correct ~ trialtype+phase+z.trialno+z.age+sex+(1|id)+(0+z.trialno+phase.transfer.c+trialtype.food.c|id),data=conmon1, family=binomial, control=contr)
+summary(full2)
+```
+
+I get the following warning: convergence code: 0, boundary (singular) fit: see ?isSingular.
+
+##Null model 2
+
+```{r, echo=TRUE}
+null2<-glmer(correct~z.trialno+(1|id)+(0+z.trialno+phase.transfer.c+trialtype.food.c|id),data=conmon1, family=binomial, control=contr)
+```
+
+##Full and null model (2) comparion
+```{r, echo=FALSE}
+round(anova(null2, full2, test="Chisq"),3)
+```
+
+##Model output - GLMM 02 Experiment 3 (Table S11)
+
+####Coefficients
+
+```{r, echo=FALSE}
+round(summary(full2)$coefficients, 3)
+
+```
+
+####Individual predictors : Likelihood ratio tests
+  
+```{r echo=FALSE}
+xdrop1=drop1(full2, test="Chisq",control=contr)
+round(xdrop1,3)
+```
+**The model without the interaction is significantly different from the null model too. There is no effect of phase in this case, but trial type has a significant effect on performance. There is a trend for age to have an effect on performance as well but I'm not going to further explore this as we had no apriori expectations about age for the monkeys.**
+
+
+##Test against chance
+####Test and transfer phase
+
+```{r, echo=TRUE}
+testphase <-conmon1%>%
+  filter(phase == "pattern-test")
+testchance <- glmer(correct ~ 1 + (z.trialno | id), data= testphase, family=binomial)
+summary(testchance)
+```
+```{r, echo=TRUE}
+transferphase <-conmon1%>%
+  filter(phase == "pattern-transfer")
+transferchance <- glmer(correct ~ 1 + (z.trialno | id), data= transferphase, family=binomial)
+summary(transferchance)
+```
+
+####Trial type
+
+```{r, echo=FALSE}
+sticktrials <-conmon1%>%
+  filter(trialtype == "stick")
+stickchance <- glmer(correct ~ 1 + (z.trialno | id),data= sticktrials, family=binomial)
+summary(stickchance)
+
+foodtrials <-conmon1%>%
+  filter(trialtype == "food")
+foodchance <- glmer(correct ~ 1 + (z.trialno | id),data= foodtrials, family=binomial)
+summary(foodchance)
+```
+
+####Plotting performance in different trial types - Figure S6
+
+```{r}
+conmon_trialtype <- conmon1 %>% 
+  group_by(trialtype, id) %>% 
+  summarize(correct = mean(correct)) %>% 
+  add_count(correct)
+p2 <- ggplot(data=conmon_trialtype, aes(x=trialtype, y=correct, group=trialtype)) +geom_boxplot()+ylim(0,1)+geom_point(size = conmon_trialtype$n, colour = "darkgrey", alpha=0.3) +geom_line(aes(group = id), colour = "darkgrey", alpha = 0.5)+labs(x="",y="Mean number of correct choices")+ theme_few()+ggtitle("Trial type")+geom_hline(yintercept=0.5, linetype="dashed", color = "red")
+p2
+```
+
+
+##Correcting the p-values for the post-hoc tests using Hochberg correction (in the order: test, transfer, stick-food, food-stick)
+
+```{r, echo=TRUE}
+pvalues <- c(0.0463, 0.0811, 0.789, 0.00746)
+p.adjust(pvalues, method="hochberg")
+```
+**The corrected p-values demonstrate that performance in Test and Transfer phases are not significantly different from chance, neither are performances in stick-food trial. Only the performance in food-stick trials is above chance. Some monkeys performed well in Test and Transfer phases depending on which trial type they received- more information on these details in ESM under Figure S6**
+
+
+####How about the first trial performance in Transfer phase: Is performance above chance?
+
+```{r, echo=TRUE}
+conmon_1st_trial <- conmon1 %>%
+  filter(phase=="pattern-transfer" & sessionno=="1", trialno=="1")
+#I am fitting a glm with binomial error structure for the first trial transfer phase analysis and not a mixed model given that it only includes one data point per subject.
+firsttrialchance <- glm(correct ~ 1, data= conmon_1st_trial, family=binomial)
+summary(firsttrialchance)
+```
+
+
+```{r}
+sum(conmon_1st_trial$correct)
+length(conmon_1st_trial$correct)
+
+binom.test(x=sum(conmon_1st_trial$correct), n=length(conmon_1st_trial$correct), p=0.5, alternative = "two.sided")
+```
+
+**No, performance in the first trial of transfer does not differ from chance level.**
+
+
+##Plotting performance in Test and Transfer phases across trials.
+
+
+```{r, include=FALSE}
+#First I will calculate the CI predictions for the Test phase.
+conmon3<-read.csv("conmon_complete_test.csv", header=T)#getting data for test phase
+str(conmon3)
+
+#Doing all the transformations for running the new GLMM model
+conmon3$id<-as.factor(conmon3$id)
+conmon3$sex<-as.factor(conmon3$sex)
+conmon3$phase<-as.factor(conmon3$phase)
+
+conmon3$trialtype<-as.factor(conmon3$trialtype)
+
+
+#We scale variables so that the differences in the range of the variables do not influence the parameter estimations.
+conmon3$z.trialno<-as.vector(scale(conmon3$trialno))
+conmon3$z.age=as.vector(scale(conmon3$age))
+conmon3$trialtype<-relevel(conmon3$trialtype, ref = "stick")
+
+#coding dummy variables before centering the slopes
+conmon3$trialtype.food<-as.numeric(conmon3$trialtype==levels(conmon3$trialtype)[2])
+conmon3$sex.m<-as.numeric(conmon3$sex==levels(conmon3$sex)[2])
+
+#centering the slopes: p-values of the factors can be influenced by the choice of reference category.
+#by centering the factor for the random slope components the p-values should be the same irrespective of the choice of the reference level
+conmon3$trialtype.food.c<-conmon3$trialtype.food-mean(conmon3$trialtype.food)
+conmon3$sex.m.c<-conmon3$sex.m -mean(conmon3$sex.m)
+
+str(conmon3)
+summary(conmon3)
+
+```
+
+
+```{r}
+##Next I will run the new model for calculating CIs for Test phase.
+
+#contr<-glmerControl(optimizer="bobyqa", optCtrl=list(maxfun=10000000))
+
+#full.CI.contest <- glmer(correct ~ trialtype.food.c + z.age + sex.m.c + z.trialno+ (1|id)+(0+z.trialno+trialtype.food.c|id), data=conmon3, family=binomial, control=contr)
+
+
+#boot.res.contest=boot.glmm.pred(model.res=full.CI.contest, excl.warnings=T, nboots=1000, resol=80, level=0.95, use="z.trialno", n.cores="all-1", para=T)
+
+#boot.res.contest$ci.estimates
+#boot.res.contest$ci.predicted
+
+#save.image("pattern_con_complete_testCIs.RData")
+load("pattern_con_complete_testCIs.RData")
+
+```
+
+```{r}
+conmon_separate <- conmon3 %>%
+  group_by(trialno) %>% 
+  summarize(correct= mean(correct))%>%
+  ungroup()%>%
+  group_by(trialno)%>%
+    add_count(correct)
+
+plot.contest=seq(from=min(conmon_separate$trialno),
+             to=max(conmon_separate$trialno),length.out=80)
+
+ci.data<-boot.res.contest$ci.predicted 
+
+scatter.contest <- ggplot(ci.data, aes(y = fitted)) +
+  geom_point(data=conmon_separate, aes(x = trialno, y = correct), size = conmon_separate$n, alpha = 0.8) +
+  geom_ribbon(data = ci.data, aes(x = plot.contest, y = fitted, ymin = lower.cl, ymax = upper.cl), fill = "grey", alpha = 0.5) +
+  geom_line(data = ci.data, aes(x = plot.contest, y = fitted), lty = 2)+ scale_x_continuous(breaks = c(1,8,16,24,32,40,48,56,64,72,80)) +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  xlab("Number of trials in Test") +
+  ylab("Correct response") +
+  ylim(0, 1) +
+  geom_hline(yintercept = 0.50, color = "red", linetype = "dashed")
+
+scatter.contest
+```
+
+```{r}
+#I will do the same for Tansfer phase data
+
+conmon4<-read.csv("conmon_complete_transfer.csv", header=T)
+str(conmon4)
+
+conmon4$id<-as.factor(conmon4$id)
+conmon4$sex<-as.factor(conmon4$sex)
+conmon4$sessiontype<-as.factor(conmon4$sessiontype)
+
+conmon4$trialtype<-as.factor(conmon4$trialtype)
+
+
+#We scale variables so that the differences in the range of the variables do not influence the parameter estimations.
+conmon4$z.trialno<-as.vector(scale(conmon4$trialno))
+conmon4$trialtype<-relevel(conmon4$trialtype, ref = "stick")
+conmon4$z.age=as.vector(scale(conmon4$age))
+
+#coding dummy variables before centering the slopes
+conmon4$trialtype.food<-as.numeric(conmon4$trialtype==levels(conmon4$trialtype)[2])
+conmon4$sex.m<-as.numeric(conmon4$sex==levels(conmon4$sex)[2])
+
+#centering the slopes: p-values of the factors can be influenced by the choice of reference category.
+#by centering the factor for the random slope components the p-values should be the same irrespective of the choice of the reference level
+conmon4$trialtype.food.c<-conmon4$trialtype.food-mean(conmon4$trialtype.food)
+conmon4$sex.m.c<-conmon4$sex.m -mean(conmon4$sex.m)
+
+summary(conmon4)
+
+```
+
+```{r}
+#contr<-glmerControl(optimizer="bobyqa", optCtrl=list(maxfun=10000000))
+
+#full.CI.contransfer <- glmer(correct ~ trialtype.food.c + z.age + sex.m.c + z.trialno+ (1|id)+(0+z.trialno+trialtype.food.c|id), data=conmon4, family=binomial, control=contr)
+
+#boot.res.contransfer=boot.glmm.pred(model.res=full.CI.contransfer, excl.warnings=T, nboots=1000, resol=16, level=0.95, use="z.trialno", n.cores="all-1", para=T)
+
+#boot.res.contransfer$ci.estimates
+#boot.res.contransfer$ci.predicted
+
+#save.image("pattern_con_complete_transferCIs.RData")
+load("pattern_con_complete_transferCIs.RData")
+
+```
+
+
+```{r}
+conmon_separate2 <- conmon4 %>%
+  group_by(trialno) %>% 
+  summarize(correct= mean(correct))%>%
+  ungroup()%>%
+  group_by(trialno)%>%
+    add_count(correct)
+
+plot.contransfer=seq(from=min(conmon_separate2$trialno),
+             to=max(conmon_separate2$trialno),length.out=16)
+
+ci.data.transfer<-boot.res.contransfer$ci.predicted 
+
+
+scatter.contransfer <- ggplot(ci.data.transfer, aes(y = fitted)) +
+  geom_point(data=conmon_separate2, aes(x = trialno, y = correct), size = conmon_separate2$n, alpha = 0.8) +
+  geom_ribbon(data = ci.data.transfer, aes(x = plot.contransfer, y = fitted, ymin = lower.cl, ymax = upper.cl), fill = "grey", alpha = 0.5) +
+  geom_line(data = ci.data.transfer, aes(x = plot.contransfer, y = fitted), lty = 2)+ scale_x_continuous(breaks =c(1,8,16)) +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  xlab("Number of trials in Transfer") +
+  ylab("Correct response") +
+  ylim(0, 1) +
+  geom_hline(yintercept = 0.50, color = "red", linetype = "dashed")
+
+scatter.contransfer
+```
+
+####Finally I combine the two graphs - Figure S5
+
+```{r}
+ggarrange(scatter.contest, scatter.contransfer, widths= c(7,7), heights = c(10, 10),
+          ncol = 2, nrow = 1)
+```
+

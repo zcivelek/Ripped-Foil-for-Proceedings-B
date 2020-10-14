@@ -1,0 +1,472 @@
+---
+title: "Ripped Foil Experiment 1 - Children"
+author: "Zeynep Civelek"
+date: "June 10, 2020"
+output: word_document
+---
+
+```{r, include=FALSE}
+#PREPARE
+R.Version()#for referencing, shows you which R version you are using
+rm(list=ls())#removes any other items in your workspace
+ls()#check whether workspace is empty
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#Directory is set, data is added and all the libraries necessary for running the analyses are loaded.
+
+ripchild<-read.csv("ripped_child.csv", header=T)
+#all the libraries necessary to run the analyses
+library(lme4)
+library(readr)
+library(tidyverse)
+library(sjPlot)
+#install.packages('TMB', type='source')
+library(ggthemes)
+library(gridExtra)
+library(reshape2)
+library(car)
+#library(psych)
+library("ggpubr")
+library(dplyr)
+
+```
+
+##Exploring the data
+
+The structure of the data is shown below with all the variable names and levels of measurement.
+
+```{r echo=FALSE}
+ripchild$age <- as.factor(ripchild$age)# makes continuous variables categorical
+ripchild$id<-as.factor(ripchild$id)
+ripchild$sex<-as.factor(ripchild$sex)
+ripchild$trialtype<-as.factor(ripchild$trialtype)
+ripchild$order<-as.factor(ripchild$order)
+ripchild$order2<-as.factor(ripchild$order2)
+ripchild$order3<-as.factor(ripchild$order3)
+ripchild$agecat<-as.factor(ripchild$agecat)
+ripchild$openended<-as.factor(ripchild$openended)
+
+str(ripchild)
+summary(ripchild)
+mean(ripchild$agemonths)
+sd(ripchild$agemonths)
+sd(ripchild$trialno)
+```
+
+```{r}
+###Getting the age, sex distribution table
+ripchild_penfirst <- ripchild %>%
+  filter(order=="penfirst") %>%
+  group_by(id, sex, agemonths) %>% 
+  summarize(correct = mean(correct))
+boys_pen <- subset(ripchild_penfirst, sex == "2")
+mean(boys_pen$agemonths)
+sd(boys_pen$agemonths)
+min(boys_pen$agemonths)
+max(boys_pen$agemonths)
+girls_pen <- subset(ripchild_penfirst, sex == "1")
+mean(girls_pen$agemonths)
+sd(girls_pen$agemonths)
+min(girls_pen$agemonths)
+max(girls_pen$agemonths)
+
+
+ripchild_stickerfirst <- ripchild %>%
+  filter(order=="stickerfirst") %>%
+  group_by(id, sex, agemonths) %>% 
+  summarize(correct = mean(correct))
+boys_sticker <- subset(ripchild_stickerfirst, sex == "2")
+mean(boys_sticker$agemonths)
+sd(boys_sticker$agemonths)
+min(boys_sticker$agemonths)
+max(boys_sticker$agemonths)
+girls_sticker <- subset(ripchild_stickerfirst, sex == "1")
+mean(girls_sticker$agemonths)
+sd(girls_sticker$agemonths)
+min(girls_sticker$agemonths)
+max(girls_sticker$agemonths)
+```
+
+The distribution of age:
+
+```{r pressure, echo=FALSE}
+hist(ripchild$agemonths, xlab="Age in months (36-72)", ylab="Frequency")
+```
+
+I aggregated the trial-by-trial data to create one score per child for Test and Transfer phases as well as an overall score so I can check the distributions of scores.
+
+```{r echo=FALSE}
+ripchild_individual <- ripchild %>%
+  group_by(id, age, agemonths) %>% 
+  summarize(correct = mean(correct))%>%
+  ungroup()%>%
+  group_by(agemonths)%>%
+    add_count(correct)
+
+mean(ripchild_individual$agemonths)
+sd(ripchild_individual$agemonths)
+
+ripchild_test <- ripchild %>%
+  filter(order3=="test") %>%
+  group_by(id, agemonths) %>% 
+  summarize(correct = mean(correct))
+
+ripchild_transfer <- ripchild %>%
+  filter(order3=="transfer") %>%
+  group_by(id, agemonths) %>% 
+  summarize(correct = mean(correct)) 
+
+```
+
+##Histograms for Test and Transfer Phases and an overall score (ripchild_individual)
+
+```{r echo=FALSE}
+hist(ripchild_test$correct, xlab="Mean score in Test", xlim=c(0,1))
+hist(ripchild_transfer$correct, xlab="Mean score in Transfer", xlim=c(0,1))
+hist(ripchild_individual$correct, xlab="Overall score (Test and Transfer)", xlim=c(0,1))
+```
+
+##Preparation of the data for running the GLMM analysis
+
+*Z-transformations for 'trial no' and 'age in months'
+*Coding dummy variables for trialtype, sex and phase (order3), openended
+*Centering the random slope components for these variables.
+
+```{r include=FALSE}
+#Preprocessing of data, Z-transforming trial no and age
+
+ripchild$z.trialno<-as.vector(scale(ripchild$trialno))
+ripchild$z.age=as.vector(scale(ripchild$agemonths))
+
+ripchild$trialtype<-relevel(ripchild$trialtype, ref = "pen")
+summary(ripchild)
+
+```
+
+```{r include=FALSE}
+#Coding dummy variables before centering the slopes
+ripchild$trialtype.sticker<-as.numeric(ripchild$trialtype==levels(ripchild$trialtype)[2])
+ripchild$sex.m<-as.numeric(ripchild$sex==levels(ripchild$sex)[2])
+ripchild$order3.transfer<-as.numeric(ripchild$order3==levels(ripchild$order3)[2])
+ripchild$openended1<-as.numeric(ripchild$openended==levels(ripchild$openended)[2])
+
+
+#Centering the slopes
+ripchild$trialtype.sticker.c<-ripchild$trialtype.sticker-mean(ripchild$trialtype.sticker)
+ripchild$sex.m.c<-ripchild$sex.m -mean(ripchild$sex.m)
+ripchild$order3.transfer.c<-ripchild$order3.transfer-mean(ripchild$order3.transfer)
+ripchild$openended1.c<-ripchild$openended1 -mean(ripchild$openended1)
+
+```
+
+
+```{r echo=FALSE}
+source("./Roger_functions/diagnostic_fcns.r")
+source("./Roger_functions/glmm_stability.r")
+source("./Roger_functions/boot_glmm.r")
+```
+
+##Tests against chance
+####Test and transfer phase
+
+```{r, echo=TRUE}
+##We first explored performance against chance level in Test and Transfer phases.
+testphase <-ripchild%>%
+  filter(order3 == "test")
+testchance <- glmer(correct ~ 1 + (z.trialno | id),data= testphase, family=binomial)
+summary(testchance)
+
+transferphase <-ripchild%>%
+  filter(order3 == "transfer")
+transferchance <- glmer(correct ~ 1 + (z.trialno | id),data= transferphase, family=binomial)
+summary(transferchance)
+```
+
+**The intercepts are significant: Performances in Test and Tansfer phases are above chance level.**
+
+##Full model GLMM 01 Experiment 1 in ESM
+
+```{r echo=TRUE}
+contr<-glmerControl(optimizer="bobyqa", optCtrl=list(maxfun=10000000))
+full<-glmer(correct ~ trialtype*order3+z.trialno+z.age*order3+sex+(1|id)+(0+z.trialno+order3.transfer.c+trialtype.sticker.c|id),data=ripchild, family=binomial, control=contr)
+```
+
+The full model does not include box type (the location of the blue/pink box) as a random effect anymore due to convergence issues. But there is a singular fit warning here.
+
+##Model assumptions
+
+####Distribution of random effects
+```{r echo=FALSE}
+#An assumption of GLMMs is that the BLUPs are normally distributed. We use the following function to evaluate this. BLUPs are Best Linear Unbiased Predictors: the estimated grouping factor's level specific deviation from the common intercept or slope.
+ranef.diagn.plot(full)
+```
+
+####Model stability
+
+```{r echo=FALSE}
+#summary reveals min and max of the estimates obtained after casewise deletion of levels of random effects together with the original estimates.
+m.stab=glmm.model.stab(model.res=full, contr=contr)
+m.stab.plot(m.stab$summary[,-1])
+m.stab$summary
+m.stab$detailed$warnings
+```
+
+####Multicollinearity
+
+```{r echo=FALSE}
+coll=lm(correct ~ trialtype+order3+z.trialno+z.age+sex, data=ripchild)
+round(vif(coll),3)
+#no vif issues
+```
+
+None of these indicate a problem.
+
+##Null model GLMM 01 Experiment 1 in ESM
+
+```{r echo=TRUE}
+null<-glmer(correct~ z.trialno+(1|id)+(0+z.trialno+order3.transfer.c+trialtype.sticker.c|id),data=ripchild, family=binomial, control=contr)
+```
+
+##Full and Null comparison GLMM 01 Experiment 1 in ESM
+```{r echo=FALSE}
+round(anova(null, full, test="Chisq"),3)
+```
+
+The full model is significantly different than the null model.
+
+##Model output GLMM 01 Experiment 1 in ESM
+####Coefficients
+
+```{r echo=FALSE}
+round(summary(full)$coefficients, 3)
+```
+
+####Individual predictor: Likelihood tests 
+
+```{r echo=FALSE}
+xdrop1=drop1(full, test="Chisq",control=contr)
+round(xdrop1,3)
+```
+
+####Confidence intervals
+
+```{r}
+# model1CI=boot.glmm.pred(model.res=full, excl.warnings=T, nboots=1000, para=T)
+# round(model1CI$ci.estimates, 3)
+# save.image("model1_CIs.RData")
+load("model1_CIs.RData")
+round(model1CI$ci.estimates, 3)
+```
+
+
+**The interactions terms are not significant (although there is a trend for scores to vary by age) so I will remove them from the model.**
+
+##Reduced model without the interactions - GLMM 02 Experiment 1 in ESM
+##Full model 2 
+
+```{r echo=TRUE}
+full2=glmer(correct ~ trialtype+order3+z.trialno+z.age+sex+(1|id)+(0+z.trialno+order3.transfer.c+trialtype.sticker.c|id),data=ripchild, family=binomial, control=contr)
+```
+
+##Null model 2
+
+```{r echo=TRUE}
+null2<-glmer(correct~ z.trialno+(1|id)+(0+z.trialno+order3.transfer.c+trialtype.sticker.c|id),data=ripchild, family=binomial, control=contr)
+```
+
+####Full and null 2 comparision - GLMM 02 Experiment 1 in ESM
+
+```{r echo=FALSE}
+round(anova(null2, full2, test="Chisq"),3)
+```
+
+Full model is significantly different than the null model.
+
+##Model output GLMM 02 Experiment 1 in ESM
+####Coefficients
+
+```{r echo=FALSE}
+round(summary(full2)$coefficients, 3)
+```
+
+####Individual predictors : Likelihod ratio tests
+  
+  
+```{r echo=FALSE}
+xdrop1=drop1(full2, test="Chisq",control=contr)
+round(xdrop1,3)
+```
+
+**Age emerges as a significant predictor of scores.**
+ 
+####Confidence intervals for the reduced model without the interaction - GLMM 02 Experiment 1 in ESM
+
+```{r}
+# model2CI=boot.glmm.pred(model.res=full2, excl.warnings=T, nboots=1000, para=T)
+# round(model2CI$ci.estimates, 3)
+# save.image("model2_CIs.RData")
+load("model2_CIs.RData")
+round(model2CI$ci.estimates, 3)
+```
+
+##Scatterplot to see the effect of age on overall performance 
+
+*Running a separate model for the CI calculation.
+
+```{r echo=TRUE}
+#full.CI=glmer(correct ~ z.trialno+order3.transfer.c+trialtype.sticker.c+z.age+sex.m.c+(1+z.trialno+order3.transfer.c+trialtype.sticker.c|id),data=ripchild, family=binomial, control=contr)
+```
+
+*Getting confidence intervals for fitted values - bootstrapping
+
+```{r include=FALSE}
+#boot.res=boot.glmm.pred(model.res=full.CI, excl.warnings=T, nboots=1000, resol=68, level=0.95, use="z.age", n.cores="all-1", para=T)#with para=T your computer will get very slow so I recommend using this option particularly when you don't need to work with the PC in parallel (the CI calculation will be a lot faster though)
+
+#boot.res$ci.estimates
+#boot.res$ci.predicted
+#save.image("ripped_foil_child_CIs.RData")
+load("ripped_foil_child_CIs.RData")
+```
+
+####Overall performance across ages - Figure S2
+
+```{r echo=FALSE}
+ripchild_individual <- ripchild %>%
+  group_by(id, age, agemonths, openended) %>% 
+  summarize(correct = mean(correct))%>%
+  ungroup()%>%
+  group_by(agemonths)%>%
+    add_count(correct)
+
+plot.xvals=seq(from=min(ripchild_individual$agemonths),to=max(ripchild_individual$agemonths),length.out=68)
+
+##using ggplot but using the values from ripchild_individual instead)
+
+scatter<-ggplot(ripchild_individual, aes(x=plot.xvals, y=boot.res$ci.predicted$fitted)) + geom_point(aes(x=agemonths, y=correct), size=ripchild_individual$n, alpha=0.8)+
+geom_ribbon(data=boot.res$ci.predicted, aes(x=plot.xvals, ymin=boot.res$ci.predicted$lower.cl,ymax=boot.res$ci.predicted$upper.cl), fill="grey", alpha=0.5)+
+geom_line(data=boot.res$ci.predicted, aes(x = plot.xvals, y=boot.res$ci.predicted$fitted), lty=2)+ scale_x_continuous(breaks = seq(from = 36, to = 72, by = 6)) +  geom_segment(aes(x = 42, y = 0, xend = 42, yend = 0.5), arrow=arrow(length = unit(0.2, "cm")), colour="red")+
+theme_bw() + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+ xlab("Age in months")+ ylab("Mean correct responses")+ 
+  ylim(0,1)+
+  geom_hline(yintercept=0.50, color='red', linetype="dashed")
+
+scatter
+```
+
+**Young children (up until 42 months of age) perform at chance level in this task.**
+
+
+####Performance in Test and Transfer across ages (w/ responses to the openended question at the end) - Figure 2
+
+####Running a new model for calculating CIs for the phase*age interaction.
+
+```{r include=TRUE}
+#full.CI.int<-glmer(correct ~ trialtype.sticker.c+z.age*order3+sex.m.c+z.trialno+(1|id)+(0+z.trialno+order3.transfer.c+trialtype.sticker.c|id),data=ripchild, family=binomial, control=contr)
+
+#boot.res.int=boot.glmm.pred(model.res=full.CI.int, excl.warnings=T, nboots=1000, resol=136, level=0.95, use="z.age", n.cores="all-1", para=T) #resol=136 this time because data is aggregated for test and transfer separately.
+#boot.res.int$ci.estimates
+#boot.res.int$ci.predicted
+
+#save.image("ripped_foil_child_CIs_interaction.RData")
+load("ripped_foil_child_CIs_interaction.RData")
+```
+
+
+```{r echo=TRUE}
+ripchild_separate2 <- ripchild %>%
+  group_by(id,  agemonths, order3, openended) %>% 
+  summarize(correct= mean(correct))%>%
+  ungroup()%>%
+  group_by(agemonths, order3)%>%
+    add_count(correct)
+
+plot.int=seq(from=min(ripchild_separate2$agemonths),
+             to=max(ripchild_separate2$agemonths),length.out=68)
+
+ci.data<-boot.res.int$ci.predicted #I reduced the number of values for the confidence intervals. did not match the actual data.
+toDelete<- seq(1, nrow(ci.data),2)
+ci.data<-ci.data[toDelete,]
+
+
+scatter.int3 <- ggplot(data=ripchild_separate2, aes(x= ci.data$z.age, y = ci.data$fitted)) +
+  geom_point(data=ripchild_separate2, aes(x = agemonths, y = correct, shape=openended), size = ripchild_separate2$n, alpha = 0.8) +
+  facet_wrap(~order3) + geom_segment(data=data.frame(order3="transfer"), mapping=aes(x=44, xend=44, y=0, yend=0.5, order3="transfer"), arrow=arrow(length=unit(0.2,"cm")))+ geom_segment(data=data.frame(order3="test"), mapping=aes(x=40, xend=40, y=0, yend=0.5, order3="test"), arrow=arrow(length=unit(0.2,"cm"))) +
+  geom_ribbon(data = ci.data%>%filter(order3=="test"), aes(x = plot.int, y = fitted, ymin = lower.cl, ymax = upper.cl, group = order3), fill = "grey", alpha = 0.5) +
+  geom_line(data = ci.data%>%filter(order3=="test"), aes(x = plot.int, y = fitted), lty = 2) +
+    geom_ribbon(data = ci.data%>%filter(order3=="transfer"), aes(x = plot.int, y = fitted, ymin = lower.cl, ymax = upper.cl, group = order3), fill = "grey", alpha = 0.5) +
+  geom_line(data = ci.data%>%filter(order3=="transfer"), aes(x = plot.int, y = fitted), lty = 2) + scale_shape_manual(name="Explanation", values = c(19,21))+ scale_x_continuous(breaks = seq(from = 36, to = 72, by = 8))+
+  theme_bw() + 
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  xlab("Age in months") +
+  ylab("Mean correct responses") +
+  ylim(0, 1) +
+  geom_hline(yintercept = 0.50, color = "red", linetype = "dashed")
+
+scatter.int3
+```
+
+
+
+##First trial performance in Transfer phase
+We expect children to make more errors when they switch from test to transfer if they are solving the task using an arbitrary rule.
+*Getting the data for the first trial of Transfer
+
+```{r echo=FALSE}
+ripchild_1st_trial <- ripchild %>%
+  filter(order3=="transfer" & trialno=="1") %>%
+  group_by(id, age, agemonths, sex, trialtype, z.age, trialtype.sticker.c) %>% 
+  summarize(correct)
+ripchild_1st_trial$z.age=as.vector(scale(ripchild_1st_trial$agemonths))
+```
+
+####Performance in trial 1 of Transfer phase - binomial test + GLM
+
+```{r echo=TRUE}
+##binomial test for the first trial performance in Transfer
+binom.test(x=sum(ripchild_1st_trial$correct), n=length(ripchild_1st_trial$correct), p=0.5, alternative = "two.sided")
+
+firsttrial <- glm(correct~z.age,data=ripchild_1st_trial,family=binomial(link = "logit"))
+nullfirsttrial<-glm(correct~1, data=ripchild_1st_trial, family=binomial(link="logit"))
+anova(nullfirsttrial, firsttrial, test="Chisq")
+summary(firsttrial)$coefficients #Table S4
+confint(object=firsttrial)
+cbind(coefficients(firsttrial), confint(object=firsttrial))
+xdrop1=drop1(firsttrial, test="Chisq",control=contr)
+round(xdrop1,3)
+```
+
+**Age emerges as a significant predictor of first trial performance of Transfer.** 
+
+```{r echo=FALSE}
+#Plotting first trial performance in Transfer
+ggplot(ripchild_1st_trial, aes(x=agemonths, y=correct)) + geom_point() + 
+  stat_smooth(method="glm", fullrange = TRUE, lty=2, size=0.5, colour="Black", alpha=0.2,  method.args=list(family="binomial")) + scale_x_continuous(breaks = seq(from = 36, to = 72, by = 2)) +  scale_y_continuous(breaks = seq(0, 1, by = 1)) +geom_segment(aes(x = 50, y = 0, xend = 50, yend = 0.5), arrow=arrow(length = unit(0.2, "cm")), colour="red")+ylab("First trial performance of Transfer Phase")+xlab("Age in months")+theme_bw() + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + geom_hline(yintercept=0.50, color='red', linetype="dashed")
+ggsave("first trial in transfer.png")
+```
+
+**Young children (below 50 months) do not perform differently than chance level** - Figure S3
+
+##Analysis of the open ended questions - Table S5
+
+```{r}
+openended<-read.csv("open_ended_ripped.csv", header=T)
+
+openended$z.age=as.vector(scale(openended$agemonths)) #centering age
+str(openended)
+table(openended$explanation)
+
+
+oequestion <- glm(explanation~z.age, data=openended, family=binomial(link = "logit"))
+nullopen <- glm(explanation ~ 1, data=openended, family=binomial(link="logit"))
+anova(nullopen, oequestion, test="Chisq")
+summary(oequestion)$coefficients
+confint(object=oequestion)
+cbind(coefficients(oequestion), confint(object=oequestion))
+```
+
+
+
+
+
+
