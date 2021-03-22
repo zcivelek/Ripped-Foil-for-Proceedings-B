@@ -406,6 +406,42 @@ scatter.int3 <- ggplot(data=ripchild_separate2, aes(x= ci.data$z.age, y = ci.dat
 scatter.int3
 ```
 
+```{r echo=TRUE}
+####POST-REVIEW Changes - R1 finds the arrows unconventional. Removing them from the figure.
+
+ripchild_separate2 <- ripchild %>%
+  group_by(id,  agemonths, order3, openended) %>% 
+  summarize(correct= mean(correct))%>%
+  ungroup()%>%
+  group_by(agemonths, order3)%>%
+    add_count(correct)
+
+plot.int=seq(from=min(ripchild_separate2$agemonths),
+             to=max(ripchild_separate2$agemonths),length.out=68)
+
+ci.data<-boot.res.int$ci.predicted #I reduced the number of values for the confidence intervals. did not match the actual data.
+toDelete<- seq(1, nrow(ci.data),2)
+ci.data<-ci.data[toDelete,]
+
+
+scatter.int3 <- ggplot(data=ripchild_separate2, aes(x= ci.data$z.age, y = ci.data$fitted)) +
+  geom_point(data=ripchild_separate2, aes(x = agemonths, y = correct, shape=openended), size = ripchild_separate2$n, alpha = 0.8) +
+  facet_wrap(~order3) +
+  geom_ribbon(data = ci.data%>%filter(order3=="test"), aes(x = plot.int, y = fitted, ymin = lower.cl, ymax = upper.cl, group = order3), fill = "grey", alpha = 0.5) +
+  geom_line(data = ci.data%>%filter(order3=="test"), aes(x = plot.int, y = fitted), lty = 2) +
+    geom_ribbon(data = ci.data%>%filter(order3=="transfer"), aes(x = plot.int, y = fitted, ymin = lower.cl, ymax = upper.cl, group = order3), fill = "grey", alpha = 0.5) +
+  geom_line(data = ci.data%>%filter(order3=="transfer"), aes(x = plot.int, y = fitted), lty = 2) + scale_shape_manual(name="Explanation", values = c(19,21))+ scale_x_continuous(breaks = seq(from = 36, to = 72, by = 8))+
+  theme_bw() + 
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  xlab("Age in months") +
+  ylab("Mean correct responses") +
+  ylim(0, 1) +
+  geom_hline(yintercept = 0.50, color = "red", linetype = "dashed")
+
+scatter.int3
+ggsave("performance in test and transfer across age w explanation.png",width = 10, height = 5, scale=0.7)
+```
+
 
 
 ##First trial performance in Transfer phase
@@ -442,6 +478,16 @@ round(xdrop1,3)
 #Plotting first trial performance in Transfer
 ggplot(ripchild_1st_trial, aes(x=agemonths, y=correct)) + geom_point() + 
   stat_smooth(method="glm", fullrange = TRUE, lty=2, size=0.5, colour="Black", alpha=0.2,  method.args=list(family="binomial")) + scale_x_continuous(breaks = seq(from = 36, to = 72, by = 2)) +  scale_y_continuous(breaks = seq(0, 1, by = 1)) +geom_segment(aes(x = 50, y = 0, xend = 50, yend = 0.5), arrow=arrow(length = unit(0.2, "cm")), colour="red")+ylab("First trial performance of Transfer Phase")+xlab("Age in months")+theme_bw() + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + geom_hline(yintercept=0.50, color='red', linetype="dashed")
+ggsave("first trial in transfer.png")
+```
+
+
+
+```{r echo=FALSE}
+####POST-REVIEW Changes - R1 finds the arrows unconventional. Removing them from the figure.
+#Plotting first trial performance in Transfer
+ggplot(ripchild_1st_trial, aes(x=agemonths, y=correct)) + geom_point() + 
+  stat_smooth(method="glm", fullrange = TRUE, lty=2, size=0.5, colour="Black", alpha=0.2,  method.args=list(family="binomial")) + scale_x_continuous(breaks = seq(from = 36, to = 72, by = 2)) +  scale_y_continuous(breaks = seq(0, 1, by = 1)) +ylab("First trial performance of Transfer Phase")+xlab("Age in months")+theme_bw() + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + geom_hline(yintercept=0.50, color='red', linetype="dashed")
 ggsave("first trial in transfer.png")
 ```
 
