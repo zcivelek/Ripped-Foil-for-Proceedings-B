@@ -522,3 +522,51 @@ r.squaredGLMM(object=full2)
 #The (marginal and conditional) effect sizes in the row headed delta are the ones according to a recent paper (Nakagawa et al., 2017) which you should report. Marginal R-squared is the variance explained by the fixed effects. The conditional R-squared is the variance explained by the fixed and random effects (the model)
 ```
 
+
+
+```{r}
+###POST-REVIEW CHANGES:
+#R3 asked if the monkeys who reached the criterion in the Test phase (Reuben, Chico, Carlos and Diego) outperformed those who did not reach the criterion in the Transfer phase
+
+transfer<-read.csv("ripped_monkey_complete_transfer.csv", header=T)
+str(transfer)
+transfer$id<-as.factor(transfer$id)
+transfer$passedtest<-as.factor(transfer$passedtest)
+transfer$trialtype<-as.factor(transfer$trialtype)
+
+#We scale variables so that the differences in the range of the variables do not influence the parameter estimations.
+transfer$z.trialno<-as.vector(scale(transfer$trialno))
+transfer$trialtype<-relevel(transfer$trialtype, ref = "stick")
+transfer$passedtest<- relevel(transfer$passedtest, ref ="1")
+
+#coding dummy variables before centering the slopes
+transfer$passedtest.no<-as.numeric(transfer$passedtest==levels(transfer$passedtest)[2])
+transfer$trialtype.food<-as.numeric(transfer$trialtype==levels(transfer$trialtype)[2])
+
+#centering the slopes: p-values of the factors can be influenced by the choice of reference category.
+#by centering the factor for the random slope components the p-values should be the same irrespective of the choice of the reference level
+transfer$passedtest.no.c<-transfer$passedtest.no-mean(transfer$passedtest.no)
+transfer$trialtype.food.c<-transfer$trialtype.food-mean(transfer$trialtype.food)
+
+summary(transfer)
+
+contr<-glmerControl(optimizer="bobyqa", optCtrl=list(maxfun=10000000))
+full_R3=glmer(correct ~ passedtest+ trialtype+z.trialno+(1|id)+(0+z.trialno+trialtype.food.c+passedtest.no.c|id),data=transfer, family=binomial,control=contr)
+null_R3=glmer(correct~z.trialno+(1|id)+(0+z.trialno+trialtype.food.c+passedtest.no.c|id),data=transfer, family=binomial, control=contr)
+round(anova(null_R3, full_R3, test="Chisq"),3)
+round(summary(full_R3)$coefficients, 3)
+
+xdrop1=drop1(full_R3, test="Chisq",control=contr)
+round(xdrop1,3)
+
+###There is no difference in the Transfer performance of those who reached the criterion and who did not in Test.
+```
+
+```{r, include=FALSE}
+####Confidence intervals for the full_R3 model(passed Test/or not)
+
+#ripmon_passedtest_CI=boot.glmm.pred(model.res=full_R3, excl.warnings=T, nboots=1000, para=T)
+#save.image("ripmon_passedtest_CIs.RData")
+load("ripmon_passedtest_CIs.RData")
+round(ripmon_passedtest_CI$ci.estimates, 3)
+```
