@@ -487,3 +487,13 @@ ggarrange(scatter.contest, scatter.contransfer, widths= c(7,7), heights = c(10, 
           ncol = 2, nrow = 1)
 ```
 
+```{r}
+###POST-REVIEW CHANGES
+####Calculating effect sizes for the final model - full2
+
+#install.packages("MuMIn")
+library("MuMIn")
+r.squaredGLMM(object=full2)
+
+#The (marginal and conditional) effect sizes in the row headed delta are the ones according to a recent paper (Nakagawa et al., 2017) which you should report. Marginal R-squared is the variance explained by the fixed effects. The conditional R-squared is the variance explained by the fixed and random effects (the model)
+```
