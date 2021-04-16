@@ -521,12 +521,28 @@ r.squaredGLMM(object=full2)
 
 #The (marginal and conditional) effect sizes in the row headed delta are the ones according to a recent paper (Nakagawa et al., 2017) which you should report. Marginal R-squared is the variance explained by the fixed effects. The conditional R-squared is the variance explained by the fixed and random effects (the model)
 ```
+```{r}
+
+###POST-REVIEW CHANGES:
+###With regards to the singular fit messages, here we removed all the random slopes in model full 3. In comparison to our final model full2 (above), there are no significant changes with regards to the fixed effects. As with the child data, we decided to stick with our initial model with all random slopes.
+
+full3=glmer(correct ~ trialtype+phase+z.trialno+z.age+sex+(1|id),data=ripmon1, family=binomial, control=contr)
+null3<-glmer(correct~ z.trialno+(1|id),data=ripmon1, family=binomial, control=contr)
+
+round(anova(null3, full3, test="Chisq"),3)
+round(summary(full3)$coefficients, 3)
+
+xdrop1=drop1(full3, test="Chisq",control=contr)
+round(xdrop1,3)
+
+```
+
 
 
 
 ```{r}
 ###POST-REVIEW CHANGES:
-#R3 asked if the monkeys who reached the criterion in the Test phase (Reuben, Chico, Carlos and Diego) outperformed those who did not reach the criterion in the Transfer phase
+#R3 asked if the monkeys who reached the criterion in the Test phase (Reuben, Chico, Carlos and Diego) outperformed those who did not reach the criterion - in the Transfer phase
 
 transfer<-read.csv("ripped_monkey_complete_transfer.csv", header=T)
 str(transfer)
@@ -570,3 +586,140 @@ round(xdrop1,3)
 load("ripmon_passedtest_CIs.RData")
 round(ripmon_passedtest_CI$ci.estimates, 3)
 ```
+
+```{r}
+###POST-REVIEW CHANGES:
+#R3 would like to know how many of the 15 individuals who never reached the numerical 14/16 criterion performed above chance when all their trials were considered in Test phase.
+#To do this I will aggregate the Test performance of those 15 monkeys (80 trials) and run a binomial test to see how many of them were above chance.
+
+ripmon_test<-read.csv("ripped_monkey_complete_test.csv", header=T)
+str(ripmon_test)
+
+ripmon_test$id<-as.factor(ripmon_test$id)
+
+ripmon_notpassed <- ripmon_test %>%
+  filter(passedtest=="0")
+
+kato<- ripmon_test %>%
+  filter(id=="Kato") %>% 
+  summarize(correct)
+sum(kato$correct)
+length(kato$correct)
+binom.test(x=sum(kato$correct), n=length(kato$correct), p=0.5, alternative = "two.sided")
+#Kato not above chance
+
+junon<- ripmon_test %>%
+  filter(id=="Junon") %>% 
+  summarize(correct)
+sum(junon$correct)
+length(junon$correct)
+binom.test(x=sum(junon$correct), n=length(junon$correct), p=0.5, alternative = "two.sided")
+#Junon not above chance
+
+hazel<- ripmon_test %>%
+  filter(id=="Hazel") %>% 
+  summarize(correct)
+sum(hazel$correct)
+length(hazel$correct)
+binom.test(x=sum(hazel$correct), n=length(hazel$correct), p=0.5, alternative = "two.sided")
+#Hazel above chance
+
+luna<- ripmon_test %>%
+  filter(id=="Luna") %>% 
+  summarize(correct)
+sum(luna$correct)
+length(luna$correct)
+binom.test(x=sum(luna$correct), n=length(luna$correct), p=0.5, alternative = "two.sided")
+#Luna not above chance
+
+inti<- ripmon_test %>%
+  filter(id=="Inti") %>% 
+  summarize(correct)
+sum(inti$correct)
+length(inti$correct)
+binom.test(x=sum(inti$correct), n=length(inti$correct), p=0.5, alternative = "two.sided")
+#Into not above chance
+
+torres<- ripmon_test %>%
+  filter(id=="Torres") %>% 
+  summarize(correct)
+sum(torres$correct)
+length(torres$correct)
+binom.test(x=sum(torres$correct), n=length(torres$correct), p=0.5, alternative = "two.sided")
+#Torres not above chance (p = .056)
+
+alba<- ripmon_test %>%
+  filter(id=="Alba") %>% 
+  summarize(correct)
+sum(alba$correct)
+length(alba$correct)
+binom.test(x=sum(alba$correct), n=length(alba$correct), p=0.5, alternative = "two.sided")
+#Alba not above chance
+
+ximo<- ripmon_test %>%
+  filter(id=="Ximo") %>% 
+  summarize(correct)
+sum(ximo$correct)
+length(ximo$correct)
+binom.test(x=sum(ximo$correct), n=length(ximo$correct), p=0.5, alternative = "two.sided")
+#Ximo above chance 
+
+bear<- ripmon_test %>%
+  filter(id=="Bear") %>% 
+  summarize(correct)
+sum(bear$correct)
+length(bear$correct)
+binom.test(x=sum(bear$correct), n=length(bear$correct), p=0.5, alternative = "two.sided")
+#Bear above chance
+
+pixie<- ripmon_test %>%
+  filter(id=="Pixie") %>% 
+  summarize(correct)
+sum(pixie$correct)
+length(pixie$correct)
+binom.test(x=sum(pixie$correct), n=length(pixie$correct), p=0.5, alternative = "two.sided")
+#Pixie not above chance
+
+flojo<- ripmon_test %>%
+  filter(id=="Flojo") %>% 
+  summarize(correct)
+sum(flojo$correct)
+length(flojo$correct)
+binom.test(x=sum(flojo$correct), n=length(flojo$correct), p=0.5, alternative = "two.sided")
+#Flojo above chance
+
+rosa<- ripmon_test %>%
+  filter(id=="Rosa") %>% 
+  summarize(correct)
+sum(rosa$correct)
+length(rosa$correct)
+binom.test(x=sum(rosa$correct), n=length(rosa$correct), p=0.5, alternative = "two.sided")
+#Rosa not above chance
+
+fudge<- ripmon_test %>%
+  filter(id=="Fudge") %>% 
+  summarize(correct)
+sum(fudge$correct)
+length(fudge$correct)
+binom.test(x=sum(fudge$correct), n=length(fudge$correct), p=0.5, alternative = "two.sided")
+#Fudge above chance
+
+figo<- ripmon_test %>%
+  filter(id=="Figo") %>% 
+  summarize(correct)
+sum(figo$correct)
+length(figo$correct)
+binom.test(x=sum(figo$correct), n=length(figo$correct), p=0.5, alternative = "two.sided")
+#Figo not above chance
+
+toka<- ripmon_test %>%
+  filter(id=="Toka") %>% 
+  summarize(correct)
+sum(toka$correct)
+length(toka$correct)
+binom.test(x=sum(toka$correct), n=length(toka$correct), p=0.5, alternative = "two.sided")
+#Toka not above chance
+
+#Of the 15 monkeys that did not reach the criterion in the Test phase, 10 of them did not perform significantly above chance level (5 were above chance - Hazel, Ximo, Bear, Flojo, Fudge) when all 80 trials considered.
+```
+
