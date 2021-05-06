@@ -407,7 +407,7 @@ scatter.int3
 ```
 
 ```{r echo=TRUE}
-####POST-REVIEW Changes - R1 finds the arrows unconventional. Removing them from the figure.
+####POST-REVIEW Changes - R1 finds the arrows unconventional. Removing them from the figure. Making the chance line dotted (rather than dashed)
 
 ripchild_separate2 <- ripchild %>%
   group_by(id,  agemonths, order3, openended) %>% 
@@ -436,7 +436,7 @@ scatter.int3 <- ggplot(data=ripchild_separate2, aes(x= ci.data$z.age, y = ci.dat
   xlab("Age in months") +
   ylab("Mean correct responses") +
   ylim(0, 1) +
-  geom_hline(yintercept = 0.50, color = "red", linetype = "dashed")
+  geom_hline(yintercept = 0.50, color = "red", linetype = "dotted")
 
 scatter.int3
 ggsave("performance in test and transfer across age w explanation.png",width = 10, height = 5, scale=0.7)
@@ -484,10 +484,10 @@ ggsave("first trial in transfer.png")
 
 
 ```{r echo=FALSE}
-####POST-REVIEW Changes - R1 finds the arrows unconventional. Removing them from the figure.
+####POST-REVIEW Changes - R1 finds the arrows unconventional. Removing them from the figure. Dashed chance line changed to dotted.
 #Plotting first trial performance in Transfer
 ggplot(ripchild_1st_trial, aes(x=agemonths, y=correct)) + geom_point() + 
-  stat_smooth(method="glm", fullrange = TRUE, lty=2, size=0.5, colour="Black", alpha=0.2,  method.args=list(family="binomial")) + scale_x_continuous(breaks = seq(from = 36, to = 72, by = 2)) +  scale_y_continuous(breaks = seq(0, 1, by = 1)) +ylab("First trial performance of Transfer Phase")+xlab("Age in months")+theme_bw() + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + geom_hline(yintercept=0.50, color='red', linetype="dashed")
+  stat_smooth(method="glm", fullrange = TRUE, lty=2, size=0.5, colour="Black", alpha=0.2,  method.args=list(family="binomial")) + scale_x_continuous(breaks = seq(from = 36, to = 72, by = 2)) +  scale_y_continuous(breaks = seq(0, 1, by = 1)) +ylab("First trial performance of Transfer Phase")+xlab("Age in months")+theme_bw() + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + geom_hline(yintercept=0.50, color='red', linetype="dotted")
 ggsave("first trial in transfer.png")
 ```
 
@@ -512,16 +512,7 @@ cbind(coefficients(oequestion), confint(object=oequestion))
 ```
 
 
-```{r}
-####POST-REVIEW CHANGES:
-####Calculating effect sizes for the final model
 
-#install.packages("MuMIn")
-library("MuMIn")
-r.squaredGLMM(object=full2)
-
-#The (marginal and conditional) effect sizes in the row headed delta are the ones according to a recent paper (Nakagawa et al., 2017) which you should report. Marginal R-squared is the variance explained by the fixed effects. The conditional R-squared is the variance explained by the fixed and random effects (the model)
-```
 
 
 ```{r}
