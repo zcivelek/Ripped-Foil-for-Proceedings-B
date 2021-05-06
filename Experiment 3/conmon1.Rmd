@@ -400,7 +400,7 @@ scatter.contest <- ggplot(ci.data, aes(y = fitted)) +
   xlab("Number of trials in Test") +
   ylab("Correct response") +
   ylim(0, 1) +
-  geom_hline(yintercept = 0.50, color = "red", linetype = "dashed")
+  geom_hline(yintercept = 0.50, color = "red", linetype = "dotted")
 
 scatter.contest
 ```
@@ -475,7 +475,7 @@ scatter.contransfer <- ggplot(ci.data.transfer, aes(y = fitted)) +
   xlab("Number of trials in Transfer") +
   ylab("Correct response") +
   ylim(0, 1) +
-  geom_hline(yintercept = 0.50, color = "red", linetype = "dashed")
+  geom_hline(yintercept = 0.50, color = "red", linetype = "dotted")
 
 scatter.contransfer
 ```
@@ -485,15 +485,7 @@ scatter.contransfer
 ```{r}
 ggarrange(scatter.contest, scatter.contransfer, widths= c(7,7), heights = c(10, 10),
           ncol = 2, nrow = 1)
+ggsave("mon2 performance.png", width = 10, height = 5, scale=0.7)
+
 ```
 
-```{r}
-###POST-REVIEW CHANGES
-####Calculating effect sizes for the final model - full2
-
-#install.packages("MuMIn")
-library("MuMIn")
-r.squaredGLMM(object=full2)
-
-#The (marginal and conditional) effect sizes in the row headed delta are the ones according to a recent paper (Nakagawa et al., 2017) which you should report. Marginal R-squared is the variance explained by the fixed effects. The conditional R-squared is the variance explained by the fixed and random effects (the model)
-```
