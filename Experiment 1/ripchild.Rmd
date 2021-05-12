@@ -511,10 +511,6 @@ confint(object=oequestion)
 cbind(coefficients(oequestion), confint(object=oequestion))
 ```
 
-
-
-
-
 ```{r}
 ###POST-REVIEW CHANGES:
 ###With regards to the singular fit messages, here we removed all the random slopes in model full 3. In comparison to our final model full2 (above), there are no significant changes with regards to the fixed effects. We decided to stick with our initial model with all random slopes.
