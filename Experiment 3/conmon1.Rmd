@@ -489,3 +489,14 @@ ggsave("mon2 performance.png", width = 10, height = 5, scale=0.7)
 
 ```
 
+```{r, echo=TRUE}
+###POST-REVIEW CHANGES:
+###With regards to the singular fit messages, here we removed all the random slopes in model full 3. In comparison to our final model full2 (above), there are no significant changes with regards to the fixed effects. As with the child and ripmon data, we decided to stick with our initial model with all random slopes.
+
+full3=glmer(correct ~ trialtype+phase+z.trialno+z.age+sex+(1|id),data=conmon1, family=binomial, control=contr)
+null3<-glmer(correct~ z.trialno+(1|id),data=conmon1, family=binomial, control=contr)
+
+round(anova(null3, full3, test="Chisq"),3)
+round(summary(full3)$coefficients, 3)
+
+```
