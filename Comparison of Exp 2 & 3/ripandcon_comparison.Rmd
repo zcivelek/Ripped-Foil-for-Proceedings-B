@@ -44,10 +44,10 @@ ripconmon$experiment<-as.factor(ripconmon$experiment)
 
 str(ripconmon)
 summary(ripconmon)
-
+sd(ripconmon$trialno)
 ```
 
-Make a ripconmon_test and ripconmon_transfer data to compare them separetely.
+Make a ripconmon_test and ripconmon_transfer data to compare them separately.
 
 ```{r, echo=FALSE}
 ripconmon_test <- ripconmon %>%
@@ -60,7 +60,7 @@ ripconmon_transfer <- ripconmon %>%
   group_by(id, sessionno, trialno, experiment) %>% 
   summarize(correct)
 ```
-##Preparation of the data for running the GLMM for Test data
+##Preparation of the data for running the GLMM for Test Phase (comparing performance of the 14 monkeys in Experiment 2 and 3 Test Phase)
 
 * Scaling trial number
 * Coding categorical variables as dummy variables 
@@ -69,24 +69,24 @@ ripconmon_transfer <- ripconmon %>%
 ```{r, echo=FALSE}
 #We scale variables so that the differences in the range of the variables do not influence the parameter estimations.
 ripconmon_test$z.trialno<-as.vector(scale(ripconmon_test$trialno))
-ripconmon_test$experiment<-relevel(ripconmon_test$experiment, ref = 2)
-ripconmon_test$experiment.three<-as.numeric(ripconmon_test$experiment==levels(ripconmon_test$experiment)[2])
-ripconmon_test$experiment.three.c<-ripconmon_test$experiment.three-mean(ripconmon_test$experiment.three)
+ripconmon_test$experiment<-relevel(ripconmon_test$experiment, ref = "3")
+ripconmon_test$experiment.two<-as.numeric(ripconmon_test$experiment==levels(ripconmon_test$experiment)[2])
+ripconmon_test$experiment.two.c<-ripconmon_test$experiment.two-mean(ripconmon_test$experiment.two)
 ```
 
 ##Full model
 
 ```{r, echo=TRUE}
 contr<-glmerControl(optimizer="bobyqa", optCtrl=list(maxfun=10000000))
-full=glmer(correct ~ experiment+z.trialno+(1|id)+(0+experiment.three.c+z.trialno|id),data=ripconmon_test, family=binomial, control=contr)
-null=glmer(correct~z.trialno+(1|id)+(0+experiment.three.c+z.trialno|id),data=ripconmon_test, family=binomial, control=contr)
+full=glmer(correct ~ experiment+z.trialno+(1|id)+(0+experiment.two.c+z.trialno|id),data=ripconmon_test, family=binomial, control=contr)
+null=glmer(correct~z.trialno+(1|id)+(0+experiment.two.c+z.trialno|id),data=ripconmon_test, family=binomial, control=contr)
 ```
 
 ##Full and Null comparison
 ```{r, echo=FALSE}
 round(anova(null, full, test="Chisq"),3)
 ```
-**The full model is not significantly different than the null model.**
+**The full model is not significantly different than the null model for the Test phase.**
 
 
 ####Coefficients
@@ -101,9 +101,19 @@ round(summary(full)$coefficients, 3)
 xdrop1=drop1(full, test="Chisq",control=contr)
 round(xdrop1,3)
 ```
-**There is no significant effect of experiment for Test Phase.**
 
-##Preparation of the data for running the GLMM for Test data
+```{r}
+source("./Roger_functions/boot_glmm.r")
+
+ripconmon_test=boot.glmm.pred(model.res=full, excl.warnings=T, nboots=1000, para=T)
+save.image("ripconmon_test_CIs.RData")
+load("ripconmon_test_CIs.RData")
+round(ripconmon_test$ci.estimates, 3)
+```
+
+**There is no significant effect of experiment on performance in Test Phase. The monkeys performed similarly in both Test phases of Experiment 2 and 3**
+
+##Preparation of the data for running the GLMM for Transfer phase
 
 * Scaling trial number
 * Coding categorical variables as dummy variables 
@@ -112,17 +122,17 @@ round(xdrop1,3)
 ```{r, echo=FALSE}
 #We scale variables so that the differences in the range of the variables do not influence the parameter estimations.
 ripconmon_transfer$z.trialno<-as.vector(scale(ripconmon_transfer$trialno))
-ripconmon_transfer$experiment<-relevel(ripconmon_transfer$experiment, ref = 2)
-ripconmon_transfer$experiment.three<-as.numeric(ripconmon_transfer$experiment==levels(ripconmon_transfer$experiment)[2])
-ripconmon_transfer$experiment.three.c<-ripconmon_transfer$experiment.three-mean(ripconmon_transfer$experiment.three)
+ripconmon_transfer$experiment<-relevel(ripconmon_transfer$experiment, ref = "3")
+ripconmon_transfer$experiment.two<-as.numeric(ripconmon_transfer$experiment==levels(ripconmon_transfer$experiment)[2])
+ripconmon_transfer$experiment.two.c<-ripconmon_transfer$experiment.two-mean(ripconmon_transfer$experiment.two)
 ```
 
-##Full model
+##Full model - Transfer
 
 ```{r, echo=TRUE}
 contr<-glmerControl(optimizer="bobyqa", optCtrl=list(maxfun=10000000))
-full2=glmer(correct ~ experiment+z.trialno+(1|id)+(0+experiment.three.c+z.trialno|id),data=ripconmon_transfer, family=binomial, control=contr)
-null2=glmer(correct~z.trialno+(1|id)+(0+experiment.three.c+z.trialno|id),data=ripconmon_transfer, family=binomial, control=contr)
+full2=glmer(correct ~ experiment+z.trialno+(1|id)+(0+experiment.two.c+z.trialno|id),data=ripconmon_transfer, family=binomial, control=contr)
+null2=glmer(correct~z.trialno+(1|id)+(0+experiment.two.c+z.trialno|id),data=ripconmon_transfer, family=binomial, control=contr)
 ```
 
 ##Full and Null comparison
@@ -141,4 +151,11 @@ round(summary(full2)$coefficients, 3)
 ```{r, echo=FALSE}
 xdrop2=drop1(full2, test="Chisq",control=contr)
 round(xdrop2,3)
+```
+
+```{r}
+ripconmon_transfer=boot.glmm.pred(model.res=full2, excl.warnings=T, nboots=1000, para=T)
+save.image("ripconmon_transfer_CIs.RData")
+load("ripconmon_transfer_CIs.RData")
+round(ripconmon_transfer$ci.estimates, 3)
 ```
